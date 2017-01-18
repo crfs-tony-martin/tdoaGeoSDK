@@ -1,0 +1,103 @@
+EXPORTS
+    NCP_version @1
+    _get_output_format @2
+    bad_rx_packets @3 DATA
+    debug_all @4 DATA
+    debug_int @5
+    debug_mask @6 DATA
+    debug_message @7
+    debug_network_echo @8 DATA
+    debug_pause @9 DATA
+    debug_rx_bytes @10 DATA
+    debug_show_rx_packets @11 DATA
+    debug_show_tx_packets @12 DATA
+    debug_tx_bytes @13 DATA
+    doecho @14 DATA
+    file_close @15
+    file_flush @16
+    file_open_read @17
+    file_open_write @18
+    force_debug_show_rx_packets @19 DATA
+    force_debug_show_tx_packets @20 DATA
+    force_no_link_packets @21 DATA
+    get_time_double @22
+    get_time_double2 @23
+    gettimeofday @24
+    good_rx_packets @25 DATA
+    incomplete_rx_packets @26 DATA
+    json_create_from_packet @27
+    json_free @28
+    json_full_create_from_packet @29
+    ncp_client_connect @30
+    ncp_client_create @31
+    ncp_client_disconnect @32
+    ncp_client_free @33
+    ncp_client_get_hostname @34
+    ncp_client_get_rx_packet @35
+    ncp_client_get_stats @36
+    ncp_client_get_tx_packet @37
+    ncp_client_is_connected @38
+    ncp_client_print_status @39
+    ncp_client_receive @40
+    ncp_client_receive_packet @41
+    ncp_client_send @42
+    packet_access_param @43
+    packet_add_field @44
+    packet_add_param_data @45
+    packet_add_param_data_get_ptr @46
+    packet_add_param_int @47
+    packet_add_param_string @48
+    packet_append @49
+    packet_clone @50
+    packet_create @51
+    packet_file_read @52
+    packet_file_write @53
+    packet_free @54
+    packet_get_int_param_def @55
+    packet_get_int_param_spec3 @56
+    packet_get_named_param @57
+    packet_get_next_field @58
+    packet_get_next_param @59
+    packet_get_num_fields @60
+    packet_get_num_params @61
+    packet_get_packet_format @62
+    packet_get_packet_id @63
+    packet_get_packet_nanosec @64
+    packet_get_packet_sec @65
+    packet_get_packet_size @66
+    packet_get_packet_type @67
+    packet_get_param_data @68
+    packet_get_param_int @69
+    packet_get_param_string @70
+    packet_get_string_param_def @71
+    packet_get_unread_field_params @72
+    packet_get_unread_field_params_ack @73
+    packet_key_to_str @74
+    packet_print @75
+    packet_read @76
+    packet_read_complete @77
+    packet_receive @78
+    packet_receive_call_count @79 DATA
+    packet_send @80
+    packet_set_debug_mode @81
+    packet_set_packet_type @82
+    packet_str_to_key @83
+    packet_write @84
+    packet_write_complete @85
+    pks @86
+    print_debug @87
+    print_error @88
+    print_info @89
+    print_sys_error @90
+    print_sys_info @91
+    print_sys_warning @92
+    print_warning @93
+    print_wsa_error @94
+    rx_bad_headers @95 DATA
+    rxbytecount @96 DATA
+    swap_endian @97
+    syslog_message @98
+    tcp_connect @99
+    tcp_disconnect @100
+    txbytecount @101 DATA
+    vsyslog_message @102

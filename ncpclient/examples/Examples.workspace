@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_workspace_file>
+	<Workspace title="Workspace">
+		<Project filename="bdc_sweep_example/bdc_sweep_example.cbp">
+			<Depends filename="ncpclient/ncpclient.cbp" />
+		</Project>
+		<Project filename="looped_time_example/looped_time_example.cbp">
+			<Depends filename="ncpclient/ncpclient.cbp" />
+		</Project>
+		<Project filename="looped_time_sweep_monitor_example/looped_time_sweep_monitor_example.cbp">
+			<Depends filename="ncpclient/ncpclient.cbp" />
+		</Project>
+		<Project filename="ncpclient/ncpclient.cbp" active="1" />
+		<Project filename="node_connection/node_connection.cbp">
+			<Depends filename="ncpclient/ncpclient.cbp" />
+		</Project>
+		<Project filename="reading_writing_packet/reading_writing_packet.cbp">
+			<Depends filename="ncpclient/ncpclient.cbp" />
+		</Project>
+		<Project filename="single_time_example/single_time_example.cbp">
+			<Depends filename="ncpclient/ncpclient.cbp" />
+		</Project>
+		<Project filename="ncp_example/ncp_example.cbp">
+			<Depends filename="ncpclient/ncpclient.cbp" />
+		</Project>
+		<Project filename="set_time_example/set_time_example.cbp">
+			<Depends filename="ncpclient/ncpclient.cbp" />
+		</Project>
+		<Project filename="../../../SFT0057A04NCP SDK/Code/examples/read_gps_information/read_gps_information.cbp">
+			<Depends filename="ncpclient/ncpclient.cbp" />
+		</Project>
+		<Project filename="../../../SFT0057A04NCP SDK/Code/examples/set_time_example/set_time_example.cbp">
+			<Depends filename="ncpclient/ncpclient.cbp" />
+		</Project>
+		<Project filename="../../../SFT0057A04NCP SDK/Code/examples/single_time_triggered_capture_example/single_time_example.cbp">
+			<Depends filename="ncpclient/ncpclient.cbp" />
+		</Project>
+	</Workspace>
+</CodeBlocks_workspace_file>

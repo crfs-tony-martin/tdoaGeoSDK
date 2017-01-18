@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6" />
+	<Project>
+		<Option title="ncpclient" />
+		<Option pch_mode="2" />
+		<Option compiler="gcc" />
+		<Build>
+			<Target title="Intel (Linux)">
+				<Option output="linux\libncpclient" prefix_auto="1" extension_auto="1" />
+				<Option working_dir="" />
+				<Option object_output="linux\" />
+				<Option type="2" />
+				<Option compiler="gcc" />
+				<Option createDefFile="1" />
+				<Compiler>
+					<Add option="-Wall" />
+					<Add option="-g" />
+				</Compiler>
+			</Target>
+			<Target title="Intel (Windows)">
+				<Option output="windows\libncpclient" prefix_auto="1" extension_auto="1" />
+				<Option working_dir="" />
+				<Option object_output="windows\" />
+				<Option type="2" />
+				<Option compiler="gcc" />
+				<Compiler>
+					<Add option="-Wall" />
+					<Add option="-g" />
+					<Add option="-DNO_PRINT_INFO" />
+				</Compiler>
+				<Linker>
+					<Add library="libwsock32.a" />
+				</Linker>
+			</Target>
+			<Target title="Axis">
+				<Option output="axis\libncpclient" prefix_auto="1" extension_auto="1" />
+				<Option working_dir="" />
+				<Option object_output="axis\" />
+				<Option type="2" />
+				<Option compiler="gnu_cris_compiler" />
+				<Option createDefFile="1" />
+				<Compiler>
+					<Add option="-Wall" />
+					<Add option="-g" />
+				</Compiler>
+				<Linker>
+					<Add option="-static" />
+					<Add option="-static-libgcc" />
+					<Add option="-lstdc++" />
+				</Linker>
+			</Target>
+			<Target title="Marvell">
+				<Option output="marvell\libncpclient" prefix_auto="1" extension_auto="1" />
+				<Option working_dir="" />
+				<Option object_output="marvell\" />
+				<Option type="2" />
+				<Option compiler="marvell" />
+				<Option createDefFile="1" />
+				<Compiler>
+					<Add option="-Wall" />
+					<Add option="-g" />
+				</Compiler>
+			</Target>
+			<Target title="Intel (Windows - Dynamic)">
+				<Option output="windows_dynamic\ncpclient" prefix_auto="1" extension_auto="1" />
+				<Option working_dir="windows_dynamic" />
+				<Option object_output="windows_dynamic\" />
+				<Option type="3" />
+				<Option compiler="gcc" />
+				<Option createDefFile="1" />
+				<Option createStaticLib="1" />
+				<Compiler>
+					<Add option="-fexpensive-optimizations" />
+					<Add option="-Os" />
+					<Add option="-Wall" />
+					<Add option="-DNO_PRINT_INFO" />
+				</Compiler>
+				<Linker>
+					<Add library="libwsock32.a" />
+				</Linker>
+			</Target>
+		</Build>
+		<Compiler>
+			<Add directory="..\..\client_ncp" />
+			<Add directory="..\..\base" />
+		</Compiler>
+		<Unit filename="..\..\base\crfs_debug.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="..\..\base\tcp.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="..\..\base\utils.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="..\..\client_ncp\json.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="..\..\client_ncp\ncp_client.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="..\..\client_ncp\packets.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Extensions>
+			<code_completion />
+			<debugger />
+		</Extensions>
+	</Project>
+</CodeBlocks_project_file>

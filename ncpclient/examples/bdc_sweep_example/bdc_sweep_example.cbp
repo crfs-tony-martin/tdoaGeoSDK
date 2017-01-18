@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6" />
+	<Project>
+		<Option title="bdc_sweep_example" />
+		<Option pch_mode="2" />
+		<Option compiler="gcc" />
+		<Build>
+			<Target title="Intel (Linux)">
+				<Option output="linux/bdc_sweep_example" prefix_auto="1" extension_auto="1" />
+				<Option object_output="linux/" />
+				<Option type="1" />
+				<Option compiler="gcc" />
+				<Option parameters="rfeye000590" />
+				<Compiler>
+					<Add option="-g" />
+				</Compiler>
+				<Linker>
+					<Add library="../ncpclient/linux/libncpclient.a" />
+				</Linker>
+			</Target>
+			<Target title="Intel (Windows)">
+				<Option output="windows/bdc_sweep_example" prefix_auto="1" extension_auto="1" />
+				<Option object_output="windows/" />
+				<Option type="1" />
+				<Option compiler="gcc" />
+				<Option use_console_runner="0" />
+				<Option parameters="rfeye000590" />
+				<Linker>
+					<Add library="libwsock32.a" />
+					<Add library="../ncpclient/windows/libncpclient.a" />
+					<Add library="libws2_32.a" />
+				</Linker>
+			</Target>
+			<Target title="Axis">
+				<Option output="axis/bdc_sweep_example" prefix_auto="1" extension_auto="1" />
+				<Option object_output="axis/" />
+				<Option type="1" />
+				<Option compiler="gnu_cris_compiler" />
+				<Option parameters="rfeye000590" />
+				<Compiler>
+					<Add option="-g" />
+				</Compiler>
+				<Linker>
+					<Add option="-static" />
+					<Add option="-static-libgcc" />
+					<Add option="-lstdc++" />
+					<Add library="../ncpclient/axis/libncpclient.a" />
+				</Linker>
+			</Target>
+			<Target title="Marvell">
+				<Option output="marvell/bdc_sweep_example" prefix_auto="1" extension_auto="1" />
+				<Option object_output="marvell/" />
+				<Option type="1" />
+				<Option compiler="marvell" />
+				<Option parameters="rfeye000590" />
+				<Compiler>
+					<Add option="-g" />
+				</Compiler>
+				<Linker>
+					<Add library="../ncpclient/marvell/libncpclient.a" />
+				</Linker>
+			</Target>
+		</Build>
+		<Compiler>
+			<Add option="-Wall" />
+			<Add directory="../../base" />
+			<Add directory="../../client_ncp" />
+		</Compiler>
+		<Unit filename="main.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Extensions>
+			<code_completion />
+			<debugger />
+		</Extensions>
+	</Project>
+</CodeBlocks_project_file>

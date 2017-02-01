@@ -14,29 +14,42 @@ capture *node::getPacketData(void)
 		//Make sure we don't don't generate data while parameters being updated
 		std::lock_guard<std::mutex> lck(_mtx);
 		r->_gfix = 2;
-		r->_alti = _loc._alt;
-		r->_lati = _loc._lat * 1e6;
-		r->_long = _loc._lon * 1e6;
+		std::valarray<double> position(3);
+		_loc.getSpherical(position);
+		r->_alti = position[ALT] * 1e3;
+		r->_lati = position[LAT] * 1e6;
+		r->_long = position[LON] * 1e6;
 		r->_deci = 40e6 / _bandwidth_Hz;
 		r->_time = _timeGrid.time_since_epoch().count();
-		r->iqData.resize(_samples);
+		int size = 1;
+		while (size < _samples)
+			size *= 2;
+		size /= 2;
+		r->iqData.resize(size);
 		double metres = _loc.distance(_transmitter);
 		double flightTime = metres / SPEED_OF_LIGHT;
-		int32_t offset = flightTime * _bandwidth_Hz;
 		std::default_random_engine dre;
 		dre.seed(r->_time & 0xffffffff);
 		std::uniform_real_distribution<double> modulation(-1, 1);
-		//for (size_t i = 0; i < 2 * offset; i++)
-		//	modulation(dre);
 		for (size_t i = 0; i < r->iqData.size(); i++)
 			r->iqData[i] = std::complex<double>(modulation(dre), modulation(dre));
-		//Right shift the result
-		r->iqData = r->iqData.shift(-offset);
-		//Fill the empty samples created by the shift. Flight time is always >= 0.
-		for (int32_t i = offset;i >= 0; i--)
-			r->iqData[i] = std::complex<double>(modulation(dre), modulation(dre));
+		//implement time shift in frequency domain
+		fft fourier;
+		fourier.transform(r->iqData);
+		r->iqData = r->iqData.cshift(static_cast<int>(r->iqData.size()) / 2);
+		//Calculate the actual bandwidth based on sample rate and decimation
+		double bw = static_cast<double>(1e6 * r->_srtt) / static_cast<double>(r->_deci);
+		double freq = _frequency_Hz - (bw / 0.5);
+		double fftBin = bw / r->iqData.size();
+		for (size_t i = 0; i < r->iqData.size(); i++)
+		{
+			r->iqData[i] *= std::polar<double>(1.0, -2 * PI * freq * flightTime);
+			freq += fftBin;
+		}
+		r->iqData = r->iqData.cshift(static_cast<int>(r->iqData.size()) / 2);
+		fourier.invert(r->iqData);
 		//std::lock_guard<std::mutex> lk(cout_mtx);
-		//std::cout << _port << " " << metres << "m " << offset << r->iqData[offset] << std::endl;
+		//std::cout << _port << " " << metres << "m " << flightTime << "s " << std::endl;
 	}
 	catch (std::exception e)
 	{
@@ -135,13 +148,18 @@ capture *node::getPacketData(T_PACKET* packet)
 							//TODO factor in any gain
 							r->power /= size;
 							r->power = sqrt(r->power);
-							std::cout << r->_gain << std::endl;
+							//std::cout << r->_gain << std::endl;
 						}
 						//std::cout << _host << packet_key_to_str(pname, NULL) << " = "
 						//	<< static_cast<int32_t>(*static_cast<int32_t *>(pdata)) << std::endl;
 					}
 				}
 			}
+			//Apply any gain to the power
+			double gain = r->_gain;
+			gain = pow(10, gain / 160);
+			r->power /= gain;
+			//std::cout << r->power << std::endl;
 		}
 	}
 	catch (std::exception e)
@@ -345,13 +363,27 @@ void node::setParams(Json::Value &config)
 	_samples = config.get("samples", _samples).asUInt();
 	_measureInterval_ms = config.get("measureInterval_ms", _measureInterval_ms).asInt();
 	_testMode = config.get("testMode", _testMode).asBool();
-	_loc.setSpherical(config.get("lat", _loc._lat).asDouble(), config.get("lon", _loc._lon).asDouble(), config.get("alt", _loc._alt).asDouble());
+	_minSampleRate = config.get("minSampleRate", _minSampleRate).asDouble();
+	_loc.setSpherical(config.get("lat", _loc.getLat()).asDouble(), config.get("lon", _loc.getLon()).asDouble(), config.get("alt", _loc.getAlt()).asDouble());
 	if (config.isMember("transmitter"))
 	{
 		Json::Value tx = config["transmitter"];
 		_transmitter.setSpherical(tx.get("lat", 0).asDouble(), tx.get("lon", 0).asDouble(), tx.get("alt", 0).asDouble());
 	}
 };
+
+// Given a spectrum, zero pad so that after FFT inversion the signal is resampled by a factor of 2^N
+void node::UpSampleSpectrum(uint32_t interpolation, TSignal &spectrum)
+{
+	int shift = static_cast<int>(spectrum.size() / 2);
+	TSignal temp = spectrum.cshift(-shift);
+	spectrum.resize(interpolation * spectrum.size());
+	std::copy(begin(temp), end(temp), begin(spectrum));
+	spectrum = spectrum.cshift(shift);
+	spectrum[shift] /= 2.0;
+	spectrum[spectrum.size() - shift] = spectrum[shift];
+	spectrum *= interpolation;
+}
 
 void node::run()
 {
@@ -373,13 +405,29 @@ void node::run()
 				receive_packet();
 				packet = getPacketData(ncp_packet);
 			}
-			//std::cout << packet->time << " count " << packet.use_count() << std::endl;
-			//We'll need the spectrum for correlation. Do it once before distribution.
-			_fourier.transform(packet->iqData);
-			_result->push(packet);
+			if (packet->iqData.size())
+			{
+				//std::cout << packet->time << " count " << packet.use_count() << std::endl;
+				//We'll need the spectrum for correlation. Do it once before distribution.
+				_fourier.transform(packet->iqData);
+				//Interpolate to improve resolution of the result. We aim for at least 100ns
+				//resolution so effective sample rate needs to be >10MHz. The resolution of the 
+				//measured correlation peak will affect the best achievable rms error as a
+				//perfect solution is unlikely to be found if the time offsets are even slightly off.
+				double sampleRate = (1e6 * packet->_srtt) / packet->_deci;
+				uint32_t interpolation = 1;
+				while (sampleRate < _minSampleRate)
+				{
+					interpolation *= 2;
+					sampleRate *= 2;
+				}
+				UpSampleSpectrum(interpolation, packet->iqData);
+				packet->_srtt *= interpolation;
+				_result->push(packet);
 
-			//std::lock_guard<std::mutex> lk(cout_mtx);
-			//std::cout << _title << " pushed " << packet->_time << std::endl;
+				//std::lock_guard<std::mutex> lk(cout_mtx);
+				//std::cout << _title << " pushed " << packet->_time << std::endl;
+			}
 		}
 	}
 	catch (std::exception e)

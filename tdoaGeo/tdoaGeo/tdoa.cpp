@@ -14,22 +14,19 @@ double tdoa::error(std::valarray<double> &xyz)
 	//Convert valarray to a point in space
 	location loc;
 
-	//TODO this is slow because it needlessly converts to polar
 	//If there are only two points then assume search is constrained to the surface of the earth
-	if (xyz.size() < 3)
-	{
-		double z = pow(EARTH_RADIUS, 2) - pow(xyz[0], 2) - pow(xyz[1], 2);
-		loc.setCartesian(xyz[0], xyz[1], sqrt(std::abs(z)));
-	}
+	if (xyz.size() < 3 || _threeDimensions == false)
+		loc.setCartesian(xyz[0], xyz[1]);
 	else
 		loc.setCartesian(xyz[0], xyz[1], xyz[2]);
 
 	if (loc.distance(_locations[0]) > 100000)
 		return std::numeric_limits<double>::max();
-
+	std::vector<double> metres;
 	for (size_t i = 0; i < _locations.size(); i++)
 	{
 		double m = loc.distance(_locations[i]);
+		metres.push_back(m);
 		double seconds = m / SPEED_OF_LIGHT;
 		//Convert to time of flight in ns
 		time.push_back(1e9 * m / SPEED_OF_LIGHT);
@@ -40,33 +37,52 @@ double tdoa::error(std::valarray<double> &xyz)
 	for (size_t i = 0; i < _locations.size(); i++)
 	{
 		double difference = time[i] - time[0];
-		//std::cout << "Evaluating " << loc._lat << " " << loc._lon << " " << loc._alt 
-		//	      << " calc delta: " << difference << "ns meas delta " << _timeDeltas[i] << "ns" << std::endl;
+		if(_debug.is_open())
+			_debug << loc.getLat() << ", " << loc.getLon() << " " << loc.getAlt() << "m " << _locations[i].getLat() << ", " << _locations[i].getLon() << " " << _locations[i].getAlt() << "m " << loc.distance(_locations[i])
+					 << "m calc delta: " << difference << "ns meas delta " << _locations[i]._timeDelta << "ns" << std::endl;
 		difference -= _locations[i]._timeDelta;
 		result += pow(difference, 2);
 	}
-	//if(isnan(loc._x))
-	//	std::cout << loc._x << " " << loc._y << " " << loc._z << " lat: " << loc._lat << " lon: " << loc._lon << " alt: " << loc._alt << " rms: " << sqrt(result) << "ns" << std::endl;
-
-	result = sqrt(result);
-	if (!_heatMap)
+	result = sqrt(result / _locations.size());
+	if (_debug.is_open())
+	{
+		_debug << " rms: " << result << "ns" << std::endl;
+		_debug.flush();
+	}
+	if (!_heatMapOn)
 	{
 		loc._error = result;
-		_result->heatmap.push_back(loc);
+		_heatmap.push_back(loc);
 	}
 	return result;
 }
 
-//Function which returns the rmsError at 100m at the specified angle.
+//Function which returns the rmsError at 100m from centre at the specified angle.
 //Used by the optimiser in locating the ellipse minor axis bearing
-double tdoa::negGradient(std::valarray<double> &alpha)
+double tdoa::gradient(std::valarray<double> &alpha)
 {
-	std::complex<double> centre(_result->target.centre._x, _result->target.centre._y);
-	std::complex<double> point = centre + std::polar<double>(100, alpha[0]);
-	std::valarray<double> position(2);
-	position[0] = point.real(); 	position[1] = point.imag();
-	return -error(position);
+	location loc = _target;
+	loc.move(1000, RAD_TO_DEG(alpha[0]));
+	std::valarray<double> position(3);
+	loc.getCartesian(position);
+	//Look for the minimum
+	return error(position);
 }
+
+//Function which returns the error relative at the defined distance from the centre at angle _bearing.
+//Used by the optimiser in finding the major & minor axis lengths
+double tdoa::excessError(std::valarray<double> &distance)
+{
+	if(distance[0] < 0)
+		return std::numeric_limits<double>::max();
+	location loc = _target;
+	loc.move(distance[0], _bearing);
+	std::valarray<double> position(3);
+	loc.getCartesian(position);
+	//Look for the maximum
+	return std::abs(_rmsError - error(position));
+}
+
 
 //Get time difference between two data sets
 int32_t tdoa::correlate(capture *master, capture *slave)
@@ -101,7 +117,9 @@ int32_t tdoa::correlate(capture *master, capture *slave)
 	//Nodes performed FFT so we already have the spectra and master should be conjugated
 	//Multiply together and invert the FFT
 	slave->iqData *= master->iqData;
-	_fourier.invert(slave->iqData);
+	fft fourier;
+	fourier.invert(slave->iqData);
+	slave->iqData = slave->iqData.cshift(slave->iqData.size() / 2);
 	//Copy absolute values from complex result
 	std::vector<double>correlation(slave->iqData.size());
 	for (size_t i = 0; i < correlation.size(); i++)
@@ -124,13 +142,12 @@ int32_t tdoa::correlate(capture *master, capture *slave)
 			std::cout << "peakToMean " << peakToMean << std::endl;
 			return ns;
 		}
-		if (offset > correlation.size() / 2)
-			offset -= correlation.size();
+		offset -= correlation.size() / 2;
 
 		double sampleTime = static_cast<double>(decimation * 1000) / static_cast<double>(sampleRate);	//ns
 		ns = static_cast<int32_t>(offset * sampleTime);
 		//std::lock_guard<std::mutex> lk(cout_mtx);
-		//std::cout << slave->_port << " vs " << master->_port <<  " offset " << offset << " = " << ns << "ns " << peakToMean << std::endl;
+		//std::cout << slave->_port << " vs " << master->_port <<  " offset " << offset << " at " << sampleTime << "ns = " << ns << "ns " << peakToMean << std::endl;
 	}
 	return ns;
 }
@@ -141,10 +158,12 @@ void tdoa::process(uint64_t key)
 	//std::cout << "processing " << key << " ";
 	if (_packets.find(key) == _packets.end())
 		return;
-
+	_heatmap.clear();
 	_locations.clear();
 	if (_packets[key]->size() > 2)
 	{
+		//if (!_debug.is_open())
+		//	_debug.open("c:\\users\\tmartin\\documents\\desktop\\tdoa.txt", std::ios::out);
 		//Sort in order of power
 		std::sort(_packets[key]->begin(), _packets[key]->end(), [](const capture *a, const capture *b)
 		{
@@ -152,6 +171,14 @@ void tdoa::process(uint64_t key)
 		});
 		//Master is the one with highest power
 		auto master = _packets[key]->front();
+		////If 3D not enabled then use only the 3 strongest nodes
+		//if (!_threeDimensions)
+		//{
+		//	while (_packets[key]->size() > 3)
+		//	{
+		//		_packets[key]->pop_back();
+		//	}
+		//}
 		//Conjugate the master
 		master->iqData = master->iqData.apply(std::conj);
 		//Run the correlations concurrently. correlation returns ns	
@@ -177,108 +204,100 @@ void tdoa::process(uint64_t key)
 		}
 		//Now have everything needed to solve for location so long as we have at least 3 nodes
 		//If not enough locations to geolocate then don't bother.
-		double confidence = 100;
+		double confidence = 10000;
 		std::valarray<double> xyz(2);
 		tdoaResult *result = new tdoaResult;
-		_result = result;
 		if (_locations.size() > 2)
 		{
 			//Give the optimiser a second chance if needed
-			for (int i = 0; i < 2 && confidence > 1; i++)
+			for (int i = 0; i < 2 && confidence > 1000; i++)
 			{
 				//Use master position as start of search for optimum
-				xyz.resize(2);
-				if (_locations.size() > 3)
-				{
-					xyz.resize(3);
-					xyz[2] = _locations.front()._z;
-				}
-				xyz[0] = _locations.front()._x;
-				xyz[1] = _locations.front()._y;
+				_locations.front().getCartesian(xyz);
 
+				if (_locations.size() < 4 || _threeDimensions == false)
+				{	
+					double x = xyz[X];
+					double y = xyz[Y];
+					xyz.resize(2);
+					xyz[X] = x;
+					xyz[Y] = y;
+				}
 				//Tell the optimiser how to calculate error function values 
 				using namespace std::placeholders;
 				simplex splx(std::bind(&tdoa::error, this, _1));
 				//Optimise overwrites xyz with result. If have only 3 nodes we should constrain the 
 				//search to the surface of the earth. This is done by passing only x and y data to the
 				//solver
-				confidence = splx.optimise(xyz, 1000, 1e-3);
+				confidence = splx.optimise(xyz, 1000, 1e-6);
 				//std::cout << "attempt " << i << " confidence " << confidence << std::endl;
 			}
 
-			if (confidence < 1)
+			if (confidence < _badThreshold)
 			{
-				result->target.rmsError = confidence;
-				result->target.timeStamp = master->_time;
+				result->_target._timeStamp = master->_time;
 				//Optimisation carried out in cartesian space. Convert back to spherical
-				if (_locations.size() > 3)
-					result->target.centre.setCartesian(xyz[0], xyz[1], xyz[2]);
-				else
-					result->target.centre.setCartesian(xyz[0], xyz[1], sqrt(std::abs(pow(EARTH_RADIUS, 2) - pow(xyz[0], 2) - pow(xyz[1], 2))));
-				
-				result->nodes = _locations;
-				if (_heatMap)
+				result->_target._centre.setCartesian(xyz);
+				_target = result->_target._centre;
+				result->_target._centre._error = confidence;
+
+				result->_nodes = _locations;
+				location best = result->_target._centre;
+				if (_heatMapOn)
 				{
-					result->heatmap.reserve(65536);
-					for (double lat = result->target.centre._lat - 0.01; lat < result->target.centre._lat + 0.01; lat += 0.0002)
+					_heatmap.clear();
+					for (double lat = result->_target._centre.getLat() - 0.01; lat < result->_target._centre.getLat() + 0.01; lat += 0.0002)
 					{
-						for (double lon = result->target.centre._lon - 0.02; lon < result->target.centre._lon + 0.02; lon += 0.0005)
+						for (double lon = result->_target._centre.getLon() - 0.02; lon < result->_target._centre.getLon() + 0.02; lon += 0.0005)
 						{
-							location loc(lat, lon, 0);
-							std::valarray<double> map(2);
-							map[0] = loc._x; map[1] = loc._y;
+							location loc(lat, lon, result->_target._centre.getAlt());
+							std::valarray<double> map(3);
+							loc.getCartesian(map);
 							loc._error = error(map);
-							result->heatmap.push_back(loc);
+							if (loc._error < best._error)
+								best = loc;
+							_heatmap.push_back(loc);
 						}
 					}
 				}
+
 				//Find the minor axis of the elipse. This involves searching for the direction with the maximum uphill gradient.
 				//This is more robust than searching for the major axis which may lie along a valley. Use the optimiser as it will
-				//require far fewer itearions than a brute force search.
-				std::complex<double> centre(xyz[0], xyz[1]);
-				std::valarray<double> alpha;
-				alpha.resize(1);
+				//require far fewer iterations than a brute force search.
+				std::valarray<double> alpha(1);			//radians
 				using namespace std::placeholders;
-				simplex splx(std::bind(&tdoa::negGradient, this, _1));
+				simplex splx(std::bind(&tdoa::gradient, this, _1));
 				//Optimise overwrites alpha with result.
-				double errorVal = splx.optimise(alpha, PI/8, 1e-3);
+				splx.optimise(alpha, PI/8, 1e-3);
 
-				result->target.ellipse.angle = RAD_TO_DEG(alpha[0]);
+				_bearing = (180 * alpha[0] / PI);
+				result->_target._ellipse._angle = _bearing + 90;
 				//Now we have the orientation of the ellipse search for the defined rms error
-				double offset1 = 1, offset2 = 1, offset3 = 1;
-				do
-				{
-					std::complex<double> point = centre + std::polar<double>(offset1, alpha[0]);
-					xyz[0] = point.real(); 	xyz[1] = point.imag();
-					offset1 += 1;
-				}
-				while (error(xyz) < _rmsError);
-				result->target.ellipse.minor = offset1;
-				//Repeat for the major axis, using both directions
-				do
-				{
-					std::complex<double> point = centre + std::polar<double>(offset2, alpha[0] + (PI/2));
-					xyz[0] = point.real(); 	xyz[1] = point.imag();
-					offset2 += 1;
-				} while (error(xyz) < _rmsError + result->target.rmsError);
-				do
-				{
-					std::complex<double> point = centre + std::polar<double>(offset3, alpha[0] - (PI / 2));
-					xyz[0] = point.real(); 	xyz[1] = point.imag();
-					offset3 += 1;
-				} while (error(xyz) < _rmsError + result->target.rmsError);
-
-				//Major and minor axes lengths in metres
-				result->target.ellipse.minor = 2 * offset1;
-				result->target.ellipse.major = offset2 + offset3;
-				//std::cout << "ellipse: " << result->target.ellipse.major << " x " << result->target.ellipse.minor << std::endl;
+				simplex splx2(std::bind(&tdoa::excessError, this, _1));
+				//Optimise overwrites shift with result.
+				std::valarray<double> shift{ 1000 };
+				splx2.optimise(shift, 100, 1);
+				double offset1 = shift[0];
+				//Repeat for the major axis in opposite direction
+				_bearing -= 180;
+				splx2.optimise(shift, 100, 1);
+				double offset2 = shift[0];
+				result->_target._ellipse._major = offset1 + offset2;
+				result->_target._ellipse._centre = _target;
 				//Shift the ellipse centre along the major axis
-				std::complex<double> point = centre + std::polar<double>(offset2 - offset3, alpha[0] + (PI / 2));
-				xyz[0] = point.real(); xyz[1] = point.imag();
-				double z = sqrt(std::abs(pow(EARTH_RADIUS, 2) - pow(xyz[0], 2) - pow(xyz[1], 2)));
-				result->target.ellipse.centre.setCartesian(xyz[0], xyz[1], z);
+				result->_target._ellipse._centre.move((offset2 - offset1) / 2, _bearing);
+				_target = result->_target._ellipse._centre;
+				//finally do minor axis
+				shift[0] /= 4;
+				_bearing += 90;
+				splx2.optimise(shift, 10, 1);
+				result->_target._ellipse._minor = 2 * shift[0];
+
+				result->_heatmap = _heatmap;
 				_resultQ->push(result);
-				std::cout << "good result " << confidence << std::endl;
+				std::cout << "result " << result->_target._centre.getLat() << ", " << result->_target._centre.getLon() << " " << result->_target._centre.getAlt() << "m " << confidence << std::endl;
+				if (_debug.is_open())
+					_debug << "result " << result->_target._centre.getLat() << ", " << result->_target._centre.getLon() << " " << result->_target._centre.getAlt() << "m " << confidence << " onto queue of " << _resultQ->size() << std::endl;
 			}
 			else
 			{
@@ -286,6 +305,8 @@ void tdoa::process(uint64_t key)
 				std::cout << "bad result " << confidence << std::endl;
 			}
 		}
+		//if (_debug.is_open())
+		//	_debug.close();
 	}
 	//clean up
 	//std::cout << "deleting " << key << " entries " << _packets[key]->size() << std::endl;
@@ -300,7 +321,7 @@ void tdoa::manageBuffer()
 	if (_packets.size() == 0)
 		return;
 	//Once buffer has reached maximum size, delete the oldest 
-	if (_packets.size() > 100)
+	if (_packets.size() > 5)
 		process(_packets.begin()->first);
 		
 	for (auto pkts : _packets)
@@ -325,8 +346,10 @@ void tdoa::setParams(Json::Value config)
 	//Create a number of nodes
 	Json::Value nodes = config["nodes"];
 	Json::Value tdoa = config["tdoa"];
-	_heatMap = tdoa.get("heatMap", _heatMap).asBool();
+	_heatMapOn = tdoa.get("heatMapOn", _heatMapOn).asBool();
+	_threeDimensions = tdoa.get("threeDimensions", _threeDimensions).asBool();
 	_rmsError = tdoa.get("rmsError", _rmsError).asDouble();
+	_badThreshold = tdoa.get("badThreshold", _badThreshold).asDouble();
 
 	for (Json::ArrayIndex i = 0; i < nodes.size(); i++)
 	{
@@ -370,7 +393,8 @@ void tdoa::run()
 		//add the pointer to a multimap entry.
 		if (packet->iqData.size() > 0)
 		{
-			//std::cout << "packet from " << packet->_host << ":" << packet->_port << " " << packet->_time << std::endl;
+			//std::cout << "packet from " << packet->_host << ":" << packet->_port << " " << packet->_time 
+			//	      << "lat " << packet->_lati << " " << packet->_long << " " << packet->_alti << std::endl;
 			//Set key resolution to 1ms for synchronisation
 			int64_t key = packet->_time / 1000000;
 			//If first with this key then create a vector

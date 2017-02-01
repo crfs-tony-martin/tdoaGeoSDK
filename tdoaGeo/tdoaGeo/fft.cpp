@@ -159,8 +159,6 @@ void fft::transform(TSignal &x)
 // Cooley–Tukey FFT (in-place)
 void fft::coolytukey(TSignal &x)
 {
-
-
     const size_t N = x.size();
     if(N/2 > twiddle.size())
     {

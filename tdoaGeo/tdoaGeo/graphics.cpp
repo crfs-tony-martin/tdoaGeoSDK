@@ -90,18 +90,20 @@ bool graphics::plotResult(tdoaResult *result)
 		processEvents();
 		if (result != NULL)
 		{
+			std::valarray<double> coords(2);
 			_window->clear(sf::Color::Blue);
 			sf::Vector2u pixels = _window->getSize();
 			double maxLat = -90;
 			double minLat = 90;
 			double maxLon = -180;
 			double minLon = +180;
-			for (auto n : result->nodes)
+			for (auto n : result->_nodes)
 			{
-				maxLat = std::max(maxLat, n._lat);
-				maxLon = std::max(maxLon, n._lon);
-				minLat = std::min(minLat, n._lat);
-				minLon = std::min(minLon, n._lon);
+				n.getLatLong(coords);
+				maxLat = std::max(maxLat, coords[LAT]);
+				maxLon = std::max(maxLon, coords[LON]);
+				minLat = std::min(minLat, coords[LAT]);
+				minLon = std::min(minLon, coords[LON]);
 			}
 
 			double yscale = maxLat - minLat;
@@ -114,27 +116,30 @@ bool graphics::plotResult(tdoaResult *result)
 			double m_pix = l1.distance(l2) / ((_scale * pixels.y * (maxLat - yoffset) / yscale) - (_scale * pixels.y * (minLat - yoffset) / yscale));
 
 			double maxHeatmap = 0;
-			for (auto l : result->heatmap)
+			for (auto l : result->_heatmap)
 				maxHeatmap = std::max(maxHeatmap, l._error);
 
-			for (auto l : result->heatmap)
+			for (auto l : result->_heatmap)
 			{
-				float y = _scale * pixels.y * (l._lat - yoffset) / yscale;
-				float x = _scale * pixels.x * (l._lon - xoffset) / xscale;
+				l.getLatLong(coords);
+				float y = _scale * pixels.y * (coords[LAT] - yoffset) / yscale;
+				float x = _scale * pixels.x * (coords[LON] - xoffset) / xscale;
 				sf::CircleShape shape(3);
 				colour rgb(1.0 - (l._error / maxHeatmap));
 				shape.setFillColor(sf::Color(rgb._red, rgb._green, rgb._blue));
 				shape.setPosition((pixels.x / 2) + x, (pixels.y / 2) - y);
+				shape.setOrigin(shape.getRadius(), shape.getRadius());
 				_window->draw(shape);
 			}
 			//Draw a square for each of the nodes
-			for (auto n : result->nodes)
+			for (auto n : result->_nodes)
 			{
-				float y = _scale * pixels.y * (n._lat - yoffset) / yscale;
-				float x = _scale * pixels.x * (n._lon - xoffset) / xscale;
+				n.getLatLong(coords);
+				float y = _scale * pixels.y * (coords[LAT] - yoffset) / yscale;
+				float x = _scale * pixels.x * (coords[LON] - xoffset) / xscale;
 				//sf::CircleShape symbol(3);
 				sf::RectangleShape symbol(sf::Vector2f(10, 10));
-				if (n == result->nodes.front())
+				if (n == result->_nodes.front())
 					symbol.setFillColor(sf::Color::White);
 				else
 					symbol.setFillColor(sf::Color::Black);
@@ -142,23 +147,29 @@ bool graphics::plotResult(tdoaResult *result)
 				_window->draw(symbol);
 			}
 			//Draw the ellipse
-			float y = _scale * pixels.y * (result->target.ellipse.centre._lat - yoffset) / yscale;
-			float x = _scale * pixels.x * (result->target.ellipse.centre._lon - xoffset) / xscale;
-			double size = result->target.ellipse.major;
-			sf::CircleShape ellipse(result->target.ellipse.major/m_pix);
+			result->_target._ellipse._centre.getLatLong(coords);
+			float y = _scale * pixels.y * (coords[LAT] - yoffset) / yscale;
+			float x = _scale * pixels.x * (coords[LON] - xoffset) / xscale;
+			double size = result->_target._ellipse._major;
+			sf::CircleShape ellipse(result->_target._ellipse._major/m_pix);
+			//Magic number for screen aspect ratio. Needed to correct the orientation of
+			//the ellipse on the display. The target should lie on the major axis.
+			double aspect_ratio = 1.080;
+			ellipse.setRotation(result->_target._ellipse._angle * aspect_ratio);
 			ellipse.setPosition((pixels.x / 2) + x, (pixels.y / 2) - y);
 			ellipse.setOrigin(ellipse.getRadius(), ellipse.getRadius());
 			ellipse.setFillColor(sf::Color(0,128,0,128));
 			ellipse.setOutlineColor(sf::Color::Black);
 			ellipse.setOutlineThickness(1);
-			ellipse.setScale(1.0, result->target.ellipse.minor / result->target.ellipse.major);
-			ellipse.setRotation(-result->target.ellipse.angle);
+			ellipse.setScale(1.0, result->_target._ellipse._minor / result->_target._ellipse._major);
+			//ellipse.setRotation(result->_target._ellipse._angle);
 			_window->draw(ellipse);
 			//Draw the target
-			y = _scale * pixels.y * (result->target.centre._lat - yoffset) / yscale;
-			x = _scale * pixels.x * (result->target.centre._lon - xoffset) / xscale;
+			result->_target._centre.getSpherical(coords);
+			y = _scale * pixels.y * (coords[LAT] - yoffset) / yscale;
+			x = _scale * pixels.x * (coords[LON] - xoffset) / xscale;
 			sf::CircleShape shape(3);
-			colour rgb(1.0 - result->target.rmsError);
+			colour rgb(1.0 - result->_target._centre._error);
 			//shape.setFillColor(sf::Color(rgb._red, rgb._green, rgb._blue));
 			shape.setFillColor(sf::Color::Black);
 			shape.setPosition((pixels.x / 2) + x, (pixels.y / 2) - y);
@@ -166,15 +177,15 @@ bool graphics::plotResult(tdoaResult *result)
 			_window->draw(shape);
 
 			//End the current frame
-			std::string title = std::to_string(result->target.centre._lat) + ", " + std::to_string(result->target.centre._lon)
-				+ "   " + std::to_string(result->target.timeStamp) + "   " + std::to_string(result->target.rmsError);
+			std::string title = std::to_string(coords[LAT]) + ", " + std::to_string(coords[LON])
+				+ "  " + std::to_string(coords[ALT]) + "m   " + std::to_string(result->_target._timeStamp)
+				+ "   " + std::to_string(result->_target._centre._error);
 			_window->setTitle(title.c_str());
 			_window->display();
 		}
 	}
 	return open;
 }
-
 
 
 bool graphics::drawSignal(TSignal &s)

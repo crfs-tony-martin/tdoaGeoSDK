@@ -105,7 +105,7 @@
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>IPP;LOGFILE;_CRT_SECURE_NO_WARNINGS;SFML_STATIC;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NO_IPP;_SCL_SECURE_NO_WARNINGS;LOGFILE;_CRT_SECURE_NO_WARNINGS;SFML_STATIC;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>C:\SFML-2.3.2-windows-vc14-64-bit\SFML-2.3.2\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <FloatingPointModel>Strict</FloatingPointModel>
@@ -142,7 +142,7 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>IPP;LOGFILE;_CRT_SECURE_NO_WARNINGS;SFML_STATIC;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NO_IPP;_SCL_SECURE_NO_WARNINGS;LOGFILE;_CRT_SECURE_NO_WARNINGS;SFML_STATIC;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>C:\SFML-2.3.2-windows-vc14-64-bit\SFML-2.3.2\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <FloatingPointModel>Strict</FloatingPointModel>
@@ -162,6 +162,7 @@
     <ClCompile Include="fft.cpp" />
     <ClCompile Include="graphics.cpp" />
     <ClCompile Include="jsoncpp.cpp" />
+    <ClCompile Include="location.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="node.cpp" />
     <ClCompile Include="tdoa.cpp" />
@@ -170,6 +171,7 @@
     <ClInclude Include="fft.h" />
     <ClInclude Include="graphics.h" />
     <ClInclude Include="json.h" />
+    <ClInclude Include="location.h" />
     <ClInclude Include="node.h" />
     <ClInclude Include="safeQueue.h" />
     <ClInclude Include="simplex.h" />

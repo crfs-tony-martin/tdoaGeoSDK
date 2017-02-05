@@ -5,3 +5,6 @@
 *.log
 *.pdb
 *.ilk
+*.iobj
+*.ipdb
+*.sdf

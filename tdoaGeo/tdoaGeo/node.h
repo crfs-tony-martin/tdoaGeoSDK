@@ -40,9 +40,9 @@ public:
 	~capture()
 	{
 	}
-	bool operator < (capture &c) { return power < c.power; };
+	bool operator < (capture &c) { return _power < c._power; };
 	TSignal iqData;
-	double power = { 0 };
+	double _power = { 0 };
 	int32_t _srtt = { 40 };		//Only returned by Nexus so default to 40MHz for axis/marvell
 	int32_t _deci = { 0 };
 	int32_t _gfix = { 0 };

@@ -62,6 +62,7 @@ public:
 	std::ofstream _debug;
 	bool _heatMapOn = { true };
 	bool _threeDimensions = { false };
+	double _minAltitude = { 0 };
 	double _badThreshold = { 10 };
 	double _rmsError = { 100 };
 	void setParams(Json::Value config);

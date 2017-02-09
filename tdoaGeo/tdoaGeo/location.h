@@ -57,6 +57,10 @@ public:
 	double _error = { 0 };
 	//Delay at this location relative to the master
 	int32_t _timeDelta = { 0 };
+	double _power = { 0 };
+	double _gain = { 640 };
+	uint32_t _port = { 0 };
+	std::string _host;
 private:
 	double _x; double _y; double _z;
 	double _lat; double _lon; double _alt;

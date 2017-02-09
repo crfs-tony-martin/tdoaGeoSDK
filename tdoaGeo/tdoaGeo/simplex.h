@@ -150,7 +150,7 @@
 				}
 			}
 			//print();
-			//std::cout << "iteration " << i << " best " << BEST.y << std::endl;
+			//std::cout << "iterations " << i << std::endl;
 			start = BEST.x;
 			return BEST.y;
 		}

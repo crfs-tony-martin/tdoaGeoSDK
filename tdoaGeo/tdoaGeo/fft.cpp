@@ -175,7 +175,6 @@ void fft::coolytukey(TSignal &x)
 	    return;
     }
     // divide
-	//TODO does this copy the slice to a new valarray? How then does this qualify as in place?
     valarray<complex<double>> even = x[std::slice(0, N/2, 2)];
     valarray<complex<double>>  odd = x[std::slice(1, N/2, 2)];
  

@@ -27,6 +27,7 @@ capture *node::getPacketData(void)
 		size /= 2;
 		r->iqData.resize(size);
 		double metres = _loc.distance(_transmitter);
+		r->_power = 1 / (1 + metres);
 		double flightTime = metres / SPEED_OF_LIGHT;
 		std::default_random_engine dre;
 		dre.seed(r->_time & 0xffffffff);
@@ -68,6 +69,7 @@ capture *node::getPacketData(T_PACKET* packet)
 		{
 			int fname, fid;
 			packet_read(packet);
+			double power = 0;
 			/* Loop through all the fields */
 			while (packet_get_next_field(packet, &fname, &fid) == 1)
 			{
@@ -139,16 +141,14 @@ capture *node::getPacketData(T_PACKET* packet)
 							//std::cout << plength << " samples size: " << size << std::endl;
 							int16_t *iq = static_cast<int16_t *>(pdata);
 							//Copy in last first so we discard any warm up samples
+							power = 0;
 							for (int i = plength - 1, j = size - 1; j >= 0; i -= 2, j--)
 							{
 								r->iqData[j] = std::complex<double>(iq[i - 1], iq[i]);
-								r->power += pow(iq[i - 1], 2);
-								r->power += pow(iq[i], 2);
+								power += pow(std::abs(r->iqData[j]), 2);
 							}
-							//TODO factor in any gain
-							r->power /= size;
-							r->power = sqrt(r->power);
-							//std::cout << r->_gain << std::endl;
+							power /= size;
+							power = sqrt(power);
 						}
 						//std::cout << _host << packet_key_to_str(pname, NULL) << " = "
 						//	<< static_cast<int32_t>(*static_cast<int32_t *>(pdata)) << std::endl;
@@ -158,8 +158,9 @@ capture *node::getPacketData(T_PACKET* packet)
 			//Apply any gain to the power
 			double gain = r->_gain;
 			gain = pow(10, gain / 160);
-			r->power /= gain;
-			//std::cout << r->power << std::endl;
+			r->_power = power / gain;
+			//std::lock_guard<std::mutex> lk(cout_mtx);
+			//std::cout << _port << ": " << r->_gain << ", " << r->power << std::endl;
 		}
 	}
 	catch (std::exception e)
@@ -426,7 +427,7 @@ void node::run()
 				_result->push(packet);
 
 				//std::lock_guard<std::mutex> lk(cout_mtx);
-				//std::cout << _title << " pushed " << packet->_time << std::endl;
+				//std::cout << _host << ":" << _port << " pushed " << packet->_time << " power: " << packet->power << std::endl;
 			}
 		}
 	}

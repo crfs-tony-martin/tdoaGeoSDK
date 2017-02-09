@@ -20,7 +20,8 @@ double tdoa::error(std::valarray<double> &xyz)
 	else
 		loc.setCartesian(xyz[0], xyz[1], xyz[2]);
 
-	if (loc.distance(_locations[0]) > 100000)
+	//If more than 100km or below min altitude then consider it invalid
+	if (loc.distance(_locations[0]) > 100000 || loc.getAlt() < _minAltitude)
 		return std::numeric_limits<double>::max();
 	std::vector<double> metres;
 	for (size_t i = 0; i < _locations.size(); i++)
@@ -37,18 +38,18 @@ double tdoa::error(std::valarray<double> &xyz)
 	for (size_t i = 0; i < _locations.size(); i++)
 	{
 		double difference = time[i] - time[0];
-		if(_debug.is_open())
-			_debug << loc.getLat() << ", " << loc.getLon() << " " << loc.getAlt() << "m " << _locations[i].getLat() << ", " << _locations[i].getLon() << " " << _locations[i].getAlt() << "m " << loc.distance(_locations[i])
-					 << "m calc delta: " << difference << "ns meas delta " << _locations[i]._timeDelta << "ns" << std::endl;
+		//if(_debug.is_open())
+		//	_debug << loc.getLat() << ", " << loc.getLon() << " " << loc.getAlt() << "m " << _locations[i].getLat() << ", " << _locations[i].getLon() << " " << _locations[i].getAlt() << "m " << loc.distance(_locations[i])
+		//			 << "m calc delta: " << difference << "ns meas delta " << _locations[i]._timeDelta << "ns" << std::endl;
 		difference -= _locations[i]._timeDelta;
 		result += pow(difference, 2);
 	}
 	result = sqrt(result / _locations.size());
-	if (_debug.is_open())
-	{
-		_debug << " rms: " << result << "ns" << std::endl;
-		_debug.flush();
-	}
+	//if (_debug.is_open())
+	//{
+	//	_debug << " rms: " << result << "ns" << std::endl;
+	//	_debug.flush();
+	//}
 	if (!_heatMapOn)
 	{
 		loc._error = result;
@@ -162,23 +163,22 @@ void tdoa::process(uint64_t key)
 	_locations.clear();
 	if (_packets[key]->size() > 2)
 	{
-		//if (!_debug.is_open())
-		//	_debug.open("c:\\users\\tmartin\\documents\\desktop\\tdoa.txt", std::ios::out);
 		//Sort in order of power
 		std::sort(_packets[key]->begin(), _packets[key]->end(), [](const capture *a, const capture *b)
 		{
-			return a->power > b->power;
+			return a->_power > b->_power;
 		});
 		//Master is the one with highest power
 		auto master = _packets[key]->front();
-		////If 3D not enabled then use only the 3 strongest nodes
-		//if (!_threeDimensions)
-		//{
-		//	while (_packets[key]->size() > 3)
-		//	{
-		//		_packets[key]->pop_back();
-		//	}
-		//}
+		//Avoid overdetermined condition by using only the 3/4 strongest nodes
+		size_t count = 3;
+		if (_threeDimensions)
+			count = 4;
+		while (_packets[key]->size() > count)
+		{
+			_packets[key]->pop_back();
+		}
+
 		//Conjugate the master
 		master->iqData = master->iqData.apply(std::conj);
 		//Run the correlations concurrently. correlation returns ns	
@@ -198,19 +198,23 @@ void tdoa::process(uint64_t key)
 				//std::cout << key << " " << pkt->_lati / 1e6 << " " << pkt->_long / 1e6 << " " << ns << "ns" << std::endl;
 				location loc(pkt->_lati / 1e6, pkt->_long / 1e6, pkt->_alti / 1e3);
 				loc._timeDelta = ns;
+				loc._power = pkt->_power;
+				loc._gain = pkt->_gain;
+				loc._port = pkt->_port;
+				loc._host = pkt->_host;
 				//Save location of the node in the array
 				_locations.push_back(loc);
 			}
 		}
 		//Now have everything needed to solve for location so long as we have at least 3 nodes
 		//If not enough locations to geolocate then don't bother.
-		double confidence = 10000;
+		double confidence = _badThreshold + 1;
 		std::valarray<double> xyz(2);
 		tdoaResult *result = new tdoaResult;
 		if (_locations.size() > 2)
 		{
 			//Give the optimiser a second chance if needed
-			for (int i = 0; i < 2 && confidence > 1000; i++)
+			for (int i = 0; i < 2 && confidence >= _badThreshold; i++)
 			{
 				//Use master position as start of search for optimum
 				_locations.front().getCartesian(xyz);
@@ -295,9 +299,14 @@ void tdoa::process(uint64_t key)
 
 				result->_heatmap = _heatmap;
 				_resultQ->push(result);
-				std::cout << "result " << result->_target._centre.getLat() << ", " << result->_target._centre.getLon() << " " << result->_target._centre.getAlt() << "m " << confidence << std::endl;
 				if (_debug.is_open())
-					_debug << "result " << result->_target._centre.getLat() << ", " << result->_target._centre.getLon() << " " << result->_target._centre.getAlt() << "m " << confidence << " onto queue of " << _resultQ->size() << std::endl;
+					_debug << result->_target._centre.getLat() << ", " << result->_target._centre.getLon() << ", " << result->_target._centre.getAlt() << std::endl;
+				std::lock_guard<std::mutex> lk(cout_mtx);
+				std::cout << "result " << result->_target._centre.getLat() << ", " << result->_target._centre.getLon() << " " << result->_target._centre.getAlt() << "m " << confidence << std::endl;
+				//for (auto l : _locations)
+				//{
+				//	std::cout << l._port << " power: " << l._power << " gain: " << l._gain << std::endl;
+				//}
 			}
 			else
 			{
@@ -350,6 +359,9 @@ void tdoa::setParams(Json::Value config)
 	_threeDimensions = tdoa.get("threeDimensions", _threeDimensions).asBool();
 	_rmsError = tdoa.get("rmsError", _rmsError).asDouble();
 	_badThreshold = tdoa.get("badThreshold", _badThreshold).asDouble();
+	std::string debugFile = tdoa.get("debugFile", "").asString();
+	if(!debugFile.empty())
+		_debug.open(debugFile, std::ios::out);
 
 	for (Json::ArrayIndex i = 0; i < nodes.size(); i++)
 	{
